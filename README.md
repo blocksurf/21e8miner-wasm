@@ -10,7 +10,7 @@ Mine 21e8 faster, or don't, whatever.
 
 ## TODO:
 - [ ] Setup Miner ID
-- [ ] multithreading
+- [x] multithreading
 - [ ] Resolve paymail addresses
 - [ ] Mine from cli
 - [ ] WASM modules
