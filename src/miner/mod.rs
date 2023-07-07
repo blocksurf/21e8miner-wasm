@@ -60,7 +60,7 @@ impl MagicMiner {
             &ephemeral_key,
             &sig_hash_preimage,
             bsv::SigningHash::Sha256d,
-            true,
+            false,
         )
         .unwrap();
 
@@ -175,9 +175,9 @@ impl MagicMiner {
 
             let sig = ECDSA::sign_with_deterministic_k(
                 &miner_priv,
-                &input_tx.get_id_bytes().unwrap(),
+                &input_tx.to_bytes().unwrap(),
                 SigningHash::Sha256d,
-                true,
+                false,
             )
             .unwrap();
 
@@ -187,13 +187,19 @@ impl MagicMiner {
                 "message": MINER_CONFIG.miner_id.message
             });
 
-            let hex_schema = schema.to_string().into_bytes();
+            let schema_bytes = schema.to_string().into_bytes();
 
-            let mut safe_data_out = "".to_owned(); // todo: improve this
-            safe_data_out.push_str("OP_0 OP_RETURN ");
-            safe_data_out.push_str(&hex::encode(hex_schema));
+            let encoded_pushdata = Script::encode_pushdata(&schema_bytes).unwrap();
 
-            let op_return_script = Script::from_asm_string(&safe_data_out).unwrap();
+            let safe_data_output = Script::from_chunks(vec![encoded_pushdata]).unwrap();
+
+            // manually build OP_RETURN script
+
+            let op_0 = vec![0]; // Script::from_script_bits(vec![ScriptBit::OpCode(OpCodes::OP_0)]).to_bytes();
+            let op_return = vec![106]; //Script::from_script_bits(vec![ScriptBit::OpCode(OpCodes::OP_RETURN)]).to_bytes();
+
+            let op_return_script =
+                Script::from_chunks(vec![op_0, op_return, safe_data_output.to_bytes()]).unwrap();
 
             tx.add_output(&TxOut::new(0u64, &op_return_script));
         }
