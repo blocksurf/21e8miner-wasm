@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use e8_miner::MagicMiner;
+    use magic_miner::*;
 
     #[test]
     fn mine_id() {

@@ -1,5 +1,5 @@
 [package]
-name = "e8-miner"
+name = "magic-miner"
 version = "0.1.0"
 edition = "2021"
 description = "21e8miner implemented in Rust"
