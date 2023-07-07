@@ -5,6 +5,8 @@ use bsv::{
 use colored::Colorize;
 use serde_json::json;
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 pub struct MagicMiner {}
 
@@ -80,6 +82,58 @@ impl MagicMiner {
             }
             return None;
         }
+    }
+
+    pub fn mine_parallel<'outer>(
+        sig_hash_preimage: &'outer Vec<u8>,
+        target: String,
+    ) -> Option<MinerResult> {
+        let nthreads = rayon::current_num_threads();
+        let stop = Arc::new(AtomicBool::new(false));
+        let pow_result = Arc::new(parking_lot::const_mutex::<Option<MinerResult>>(None));
+        //println!("{} available threads.", &nthreads);
+
+        rayon::in_place_scope(|scope| {
+            for _ in 0..nthreads {
+                let borrow_preimage = sig_hash_preimage.clone();
+                let cloned_target = target.clone();
+                let stop = stop.clone();
+                let pow_result = pow_result.clone();
+
+                scope.spawn(move |_| {
+                    while !stop.load(Ordering::Acquire) {
+                        match MagicMiner::sign(&borrow_preimage, &cloned_target) {
+                            Some(v) => {
+                                stop.store(true, std::sync::atomic::Ordering::Release);
+
+                                let mut pow_result = if let Some(pow_result) = pow_result.try_lock()
+                                {
+                                    pow_result
+                                } else {
+                                    // Another thread is writing a result, this thread can break.
+                                    break;
+                                };
+
+                                *pow_result = Some(v)
+                            }
+                            None => {
+                                continue;
+                            }
+                        };
+                    }
+                })
+            }
+        });
+
+        if let Ok(suffix) = Arc::try_unwrap(pow_result) {
+            if let Some(result) = suffix.into_inner() {
+                return Some(result);
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        };
     }
 
     pub fn mine_id(
@@ -164,7 +218,7 @@ impl MagicMiner {
         println!("Mining...");
 
         while pow_result.is_none() {
-            pow_result = MagicMiner::sign(&sig_hash_preimage, target);
+            pow_result = MagicMiner::mine_parallel(&sig_hash_preimage, target.to_string());
         }
 
         let unwrapped = pow_result.unwrap();
