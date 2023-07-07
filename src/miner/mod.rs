@@ -246,8 +246,14 @@ impl MagicMiner {
 
         tx.set_input(0, &tx_in);
 
-        println!("\n{}\n", &tx.to_hex().unwrap());
-        println!("Final txid: {}", &tx.get_id_hex().unwrap().yellow());
+        println!(
+            "\nSigned {} with {}\n",
+            target,
+            ephemeral_key.to_wif().unwrap()
+        );
+
+        println!("{}\n", &tx.to_hex().unwrap().yellow());
+        println!("Final txid: {}", &tx.get_id_hex().unwrap().green());
 
         if publish {
             // todo
