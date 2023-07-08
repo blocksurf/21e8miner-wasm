@@ -7,4 +7,9 @@ mod tests {
         let config = MinerConfig::get_config();
         assert!(config.is_ok())
     }
+
+    #[test]
+    fn open_or_create_default() {
+        MinerConfig::open_or_create_config_file();
+    }
 }
