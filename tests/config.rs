@@ -12,4 +12,9 @@ mod tests {
     fn open_or_create_default() {
         MinerConfig::open_or_create_config_file();
     }
+
+    #[test]
+    fn config_prompt() {
+        MinerConfig::config_prompt();
+    }
 }
