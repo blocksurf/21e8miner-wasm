@@ -9,17 +9,17 @@ use toml::de::Error as TomlError;
 pub struct MinerConfig {}
 
 #[derive(Debug, Serialize, Deserialize)]
-struct MinerIDSettings {
-    enabled: bool,
-    priv_key: String,
-    message: String,
+pub struct MinerIDSettings {
+    pub enabled: bool,
+    pub priv_key: String,
+    pub message: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MinerSettings {
-    miner_id: MinerIDSettings,
-    pay_to: String,
-    autopublish: bool,
+    pub miner_id: MinerIDSettings,
+    pub pay_to: String,
+    pub autopublish: bool,
 }
 
 pub enum PromptType {

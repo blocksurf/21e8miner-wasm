@@ -14,7 +14,7 @@ mod tests {
     }
 
     #[test]
-    fn config_prompt() {
+    fn new_setup() {
         MinerConfig::setup();
     }
 

@@ -8,33 +8,9 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::miner_config::{MinerConfig, MinerSettings, PromptType};
+
 pub struct MagicMiner {}
-
-struct MinerID<'a> {
-    enabled: bool,
-    priv_key: &'a str,
-    message: &'a str,
-}
-
-pub struct MinerConfig<'a> {
-    miner_id: MinerID<'a>,
-    payto: &'a str,
-    autopublish: bool,
-}
-
-const PRIVATE_KEY: &str = "L2QhLR3D33zE9jWVzids2qGuNyxM2DtGX6kx5RQS3d3Am3krtKvh";
-const MESSAGE: &str = "HEPBURN";
-const PAY_TO: &str = "@8161";
-
-const MINER_CONFIG: MinerConfig<'static> = MinerConfig {
-    miner_id: MinerID {
-        enabled: true,
-        priv_key: PRIVATE_KEY,
-        message: MESSAGE,
-    },
-    payto: PAY_TO,
-    autopublish: true,
-};
 
 pub struct MinerResult(String, PrivateKey);
 
@@ -141,7 +117,7 @@ impl MagicMiner {
         output_index: usize,
         script: String,
         pay_to_script: Script,
-        publish: bool,
+        miner_config: MinerSettings,
     ) {
         let mut tx = Transaction::new(1, 0);
 
@@ -169,8 +145,8 @@ impl MagicMiner {
 
         tx.add_output(&p2pkh);
 
-        if MINER_CONFIG.miner_id.enabled {
-            let miner_priv = PrivateKey::from_wif(MINER_CONFIG.miner_id.priv_key).unwrap();
+        if miner_config.miner_id.enabled {
+            let miner_priv = PrivateKey::from_wif(&miner_config.miner_id.priv_key).unwrap();
             let miner_pub = miner_priv.to_public_key().unwrap();
 
             let sig = ECDSA::sign_with_deterministic_k(
@@ -184,7 +160,7 @@ impl MagicMiner {
             let schema = json!({
                 "id": miner_pub.to_hex().unwrap(),
                 "sig": sig.to_der_hex(),
-                "message": MINER_CONFIG.miner_id.message
+                "message": &miner_config.miner_id.message
             });
 
             let schema_bytes = schema.to_string().into_bytes();
@@ -255,31 +231,17 @@ impl MagicMiner {
         println!("{}\n", &tx.to_hex().unwrap().yellow());
         println!("Final txid: {}", &tx.get_id_hex().unwrap().green());
 
-        if publish {
+        if miner_config.autopublish {
             // todo
         }
     }
 
-    pub fn start(input: Option<&str>) {
-        let txid = match input {
-            Some(v) => String::from(v),
-            None => {
-                let mut input = String::new();
-                println!("Target TXID: ");
-                std::io::stdin().read_line(&mut input).unwrap();
+    pub fn start() {
+        let txid = MinerConfig::prompt("Target TXID: {}", PromptType::Text);
 
-                if input.ends_with('\n') {
-                    input.pop();
-                    if input.ends_with('\r') {
-                        input.pop();
-                    }
-                }
-
-                input
-            }
-        };
-
-        println!("Target TXID: {}", &txid);
+        if txid.is_empty() {
+            return;
+        }
 
         // TODO: validate input
 
@@ -305,31 +267,37 @@ impl MagicMiner {
 
         if index.is_none() {
             println!("No 21e8 scripts found.");
-            std::process::exit(0)
+            return;
         };
 
-        let mut to_address: String = "".to_string();
+        let miner_config = MinerConfig::get_config().unwrap();
+
+        let mut to_address: String = miner_config.pay_to.clone();
+        let mut p2pkh_script: Script = Script::default();
 
         // todo: rip polynym
 
-        //if MINER_CONFIG.payto.is_empty() {
-        //    println!("Pay solved puzzle out to (1handle, $handle, PayMail or p2pkh address)");
-        //    std::io::stdin().read_line(&mut to_address).unwrap();
-        //
-        //    if to_address.is_empty() {
-        //        std::process::exit(1)
-        //        Err("No address found.");
-        //    }
-        //} else {
-        //    to_address = MINER_CONFIG.payto.to_string();
-        //}
+        loop {
+            if to_address.is_empty() {
+                to_address = MinerConfig::prompt(
+                    "Pay solved puzzles out to P2PKH address",
+                    PromptType::Text,
+                );
+            }
 
-        to_address = "15k1SKgZsRAqDE6SuUig3SFNebbTXxoWgS".to_string();
+            println!("Paying to {}", &to_address);
 
-        let p2pkh_script = P2PKHAddress::from_string(&to_address)
-            .unwrap()
-            .get_locking_script()
-            .unwrap();
+            match P2PKHAddress::from_string(&to_address) {
+                Ok(address) => {
+                    p2pkh_script = address.get_locking_script().unwrap();
+                    break;
+                }
+                Err(e) => {
+                    println!("{}\n", e);
+                    return;
+                }
+            };
+        }
 
         println!("Mining TX {} output {:?}", txid.trim(), &index.unwrap());
 
@@ -338,7 +306,7 @@ impl MagicMiner {
             index.unwrap(),
             target_script.unwrap().to_asm_string(),
             p2pkh_script,
-            MINER_CONFIG.autopublish,
+            miner_config,
         );
     }
 }
