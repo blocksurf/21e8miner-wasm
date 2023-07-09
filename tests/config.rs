@@ -10,11 +10,23 @@ mod tests {
 
     #[test]
     fn open_or_create_default() {
-        MinerConfig::open_or_create_config_file();
+        MinerConfig::open_or_default();
     }
 
     #[test]
     fn config_prompt() {
-        MinerConfig::config_prompt();
+        MinerConfig::setup();
+    }
+
+    #[test]
+    fn config_exists() {
+        let exists = MinerConfig::existing_config();
+
+        println!("{}", exists)
+    }
+
+    #[test]
+    fn init() {
+        MinerConfig::init()
     }
 }

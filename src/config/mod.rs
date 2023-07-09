@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::ErrorKind;
 use std::io::{Read, Write};
+use std::path::Path;
 use toml::de::Error as TomlError;
 
 pub struct MinerConfig {}
@@ -30,6 +31,31 @@ pub type PromptEntry = (String, PromptType);
 
 #[cfg_attr(docsrs, doc(cfg(feature = "config")))]
 impl MinerConfig {
+    fn toml_string(
+        pay_to: &str,
+        autopublish: &str,
+        enabled: &str,
+        priv_key: &str,
+        message: &str,
+    ) -> String {
+        format!(
+            concat!(
+                "# Pay solved puzzles out to P2PKH address\n",
+                "pay_to = \"{}\"\n",
+                "# Automatically publish solved puzzles\n",
+                "autopublish = {}\n",
+                "\n[miner_id]\n",
+                "# Enable Miner API\n",
+                "enabled = {}\n",
+                "# Private key in WIF format\n",
+                "priv_key = \"{}\"\n",
+                "# Select a message for Miner API\n",
+                "message = \"{}\"\n"
+            ),
+            pay_to, autopublish, enabled, priv_key, message
+        )
+    }
+
     pub fn get_config() -> Result<MinerSettings, TomlError> {
         let mut file: File = OpenOptions::new()
             .read(true)
@@ -44,26 +70,17 @@ impl MinerConfig {
         toml::from_str::<MinerSettings>(&content)
     }
 
-    fn generate_config_file() -> File {
+    fn default() -> File {
         println!("Generating default config.toml...\n");
 
         let mut file = File::create("config.toml").expect("Create new file");
 
-        let default = format!(
-            concat!(
-                "# Pay solved puzzles out to P2PKH address\n",
-                "pay_to = \"\"\n",
-                "# Automatically publish solved puzzles\n",
-                "autopublish = false\n",
-                "\n[miner_id]\n",
-                "# Enable Miner API\n",
-                "enabled = false\n",
-                "# Private key in WIF format\n",
-                "priv_key = \"{}\"\n",
-                "# Select a message for Miner API\n",
-                "message = \"\"\n"
-            ),
-            PrivateKey::from_random().to_wif().unwrap()
+        let default = MinerConfig::toml_string(
+            "",
+            "false",
+            "false",
+            &PrivateKey::from_random().to_wif().unwrap(),
+            "",
         );
 
         file.write(default.as_bytes())
@@ -74,7 +91,7 @@ impl MinerConfig {
         file
     }
 
-    pub fn open_or_create_config_file() -> File {
+    pub fn open_or_default() -> File {
         match OpenOptions::new()
             .read(true)
             .write(true)
@@ -83,13 +100,13 @@ impl MinerConfig {
             Ok(file) => file,
             Err(ref e) if e.kind() == ErrorKind::NotFound => {
                 println!("\nCould not find config.toml\n");
-                MinerConfig::generate_config_file()
+                MinerConfig::default()
             }
             Err(e) => panic!("Error: {}\n", e),
         }
     }
 
-    pub fn get_value_from_prompt(prompt: &str, prompt_type: PromptType) -> String {
+    pub fn prompt(prompt: &str, prompt_type: PromptType) -> String {
         match prompt_type {
             PromptType::Text => println!("{}", prompt),
             PromptType::Bool => println!("{} (y/n)", prompt),
@@ -115,49 +132,45 @@ impl MinerConfig {
         input
     }
 
-    pub fn config_prompt() {
-        let enabled = MinerConfig::get_value_from_prompt("Enable Miner API?", PromptType::Bool);
-        let priv_key =
-            MinerConfig::get_value_from_prompt("Private key in WIF format", PromptType::Text);
+    pub fn setup() {
+        let enabled = MinerConfig::prompt("Enable Miner API?", PromptType::Bool);
+        let priv_key = MinerConfig::prompt("Private key in WIF format", PromptType::Text);
 
-        let message =
-            MinerConfig::get_value_from_prompt("Select a message for Miner API", PromptType::Text);
+        let message = MinerConfig::prompt("Select a message for Miner API", PromptType::Text);
 
-        let pay_to =
-            MinerConfig::get_value_from_prompt("Pay solved puzzles out to P2PKH", PromptType::Text);
+        let pay_to = MinerConfig::prompt("Pay solved puzzles out to P2PKH", PromptType::Text);
 
-        let autopublish = MinerConfig::get_value_from_prompt(
-            "Automatically publish solved puzzles?",
-            PromptType::Bool,
-        );
+        let autopublish =
+            MinerConfig::prompt("Automatically publish solved puzzles?", PromptType::Bool);
 
         let mut config_file = OpenOptions::new()
             .read(true)
             .write(true)
+            .create(true)
             .open("config.toml")
             .expect("Opening config.toml");
 
-        let settings = format!(
-            concat!(
-                "# Pay solved puzzles out to P2PKH address\n",
-                "pay_to = \"{}\"\n",
-                "# Automatically publish solved puzzles\n",
-                "autopublish = {}\n",
-                "\n[miner_id]\n",
-                "# Enable Miner API\n",
-                "enabled = {}\n",
-                "# Private key in WIF format\n",
-                "priv_key = \"{}\"\n",
-                "# Select a message for Miner API\n",
-                "message = \"{}\"\n"
-            ),
-            pay_to, autopublish, enabled, priv_key, message
-        );
+        let settings =
+            MinerConfig::toml_string(&pay_to, &autopublish, &enabled, &priv_key, &message);
 
         config_file
             .write(settings.as_bytes())
             .expect("Write defaults to config.toml");
 
         println!("Successfully created config.toml in the root directory.\n");
+    }
+
+    pub fn existing_config() -> bool {
+        Path::new("config.toml").exists()
+    }
+
+    pub fn init() {
+        match MinerConfig::existing_config() {
+            true => {
+                let config = MinerConfig::get_config().unwrap();
+                println!("Config found!\n\n{:#?}", config)
+            }
+            false => MinerConfig::setup(),
+        }
     }
 }
