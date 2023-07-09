@@ -15,7 +15,8 @@ mod tests {
 
     #[test]
     fn new_setup() {
-        MinerConfig::setup();
+        let config = MinerConfig::setup();
+        assert!(config.is_ok())
     }
 
     #[test]

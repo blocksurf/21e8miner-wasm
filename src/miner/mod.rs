@@ -197,8 +197,6 @@ impl MagicMiner {
         let sighash: Vec<u8> = vec![65];
         let mut pow_result: Option<MinerResult> = None;
 
-        println!("Mining...");
-
         while pow_result.is_none() {
             pow_result = MagicMiner::mine_parallel(&sig_hash_preimage, target.to_string());
         }
@@ -237,7 +235,7 @@ impl MagicMiner {
     }
 
     pub fn start() {
-        let txid = MinerConfig::prompt("Target TXID: {}", PromptType::Text);
+        let txid = MinerConfig::prompt("Target TXID", PromptType::Text);
 
         if txid.is_empty() {
             return;
@@ -270,7 +268,13 @@ impl MagicMiner {
             return;
         };
 
-        let miner_config = MinerConfig::get_config().unwrap();
+        let miner_config = match MinerConfig::get_config() {
+            Ok(config) => config,
+            Err(e) => {
+                println!("\nInvalid miner config.");
+                MinerConfig::setup().unwrap()
+            }
+        };
 
         let mut to_address: String = miner_config.pay_to.clone();
         let mut p2pkh_script: Script = Script::default();

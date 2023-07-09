@@ -108,9 +108,11 @@ impl MinerConfig {
 
     pub fn prompt(prompt: &str, prompt_type: PromptType) -> String {
         match prompt_type {
-            PromptType::Text => println!("{}", prompt),
-            PromptType::Bool => println!("{} (y/n)", prompt),
+            PromptType::Text => print!("{}: ", prompt),
+            PromptType::Bool => print!("{} (y/n): ", prompt),
         }
+
+        std::io::stdout().flush().unwrap();
 
         let mut input = String::new();
 
@@ -132,7 +134,7 @@ impl MinerConfig {
         input
     }
 
-    pub fn setup() {
+    pub fn setup() -> Result<MinerSettings, TomlError> {
         let enabled = MinerConfig::prompt("Enable Miner API?", PromptType::Bool);
 
         let mut priv_key: String;
@@ -190,6 +192,8 @@ impl MinerConfig {
             .expect("Write defaults to config.toml");
 
         println!("Successfully created config.toml in the root directory.\n");
+
+        toml::from_str::<MinerSettings>(&settings)
     }
 
     pub fn existing_config() -> bool {
@@ -202,7 +206,10 @@ impl MinerConfig {
                 let config = MinerConfig::get_config().unwrap();
                 println!("Config found!\n\n{:#?}", config)
             }
-            false => MinerConfig::setup(),
+            false => {
+                MinerConfig::setup().unwrap();
+                return;
+            }
         }
     }
 }
