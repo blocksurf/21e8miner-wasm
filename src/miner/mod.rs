@@ -1,9 +1,10 @@
 use bsv::{
-    Hash, P2PKHAddress, PrivateKey, Script, ScriptTemplate, SigHash, SigningHash, Transaction,
-    TxIn, TxOut, ECDSA,
+    Hash, P2PKHAddress, PrivateKey, Script, ScriptTemplate, SigHash, Signature, SigningHash,
+    Transaction, TxIn, TxOut, ECDSA,
 };
 use colored::Colorize;
 use serde_json::json;
+use std::collections::HashMap;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use crate::miner_config::{MinerConfig, MinerSettings, PromptType};
 
 pub struct MagicMiner {}
 
-pub struct MinerResult(String, PrivateKey);
+pub struct MinerResult(Signature, PrivateKey);
 
 #[cfg_attr(docsrs, doc(cfg(feature = "miner")))]
 impl MagicMiner {
@@ -29,8 +30,24 @@ impl MagicMiner {
         Transaction::from_hex(&tx_hex).unwrap()
     }
 
+    pub fn broadcast_tx(tx: &str) {
+        let mut map = HashMap::new();
+        map.insert("txhex", tx);
+
+        let client = reqwest::blocking::Client::new();
+        match client
+            .post("https://api.whatsonchain.com/v1/bsv/main/tx/raw")
+            .json(&map)
+            .send()
+        {
+            Ok(res) => println!("Published! {}", res.text().unwrap()),
+            Err(e) => println!("{:?}", e),
+        };
+    }
+
     pub fn sign(sig_hash_preimage: &Vec<u8>, target: &str) -> Option<MinerResult> {
-        let ephemeral_key = PrivateKey::from_random();
+        let ephemeral_key =
+            PrivateKey::from_wif("L3cnXLC99TB5VuBo8gSetDkywc9NPuU5xLK9QiJm616BuzF6YGbt").unwrap();
 
         let signature = ECDSA::sign_with_deterministic_k(
             &ephemeral_key,
@@ -49,7 +66,7 @@ impl MagicMiner {
 
         if sig256.starts_with(target) {
             println!("\r{}", sig256.green());
-            return Some(MinerResult(sig256, ephemeral_key));
+            return Some(MinerResult(signature, ephemeral_key));
         } else {
             print!("\r{}", sig256.red());
             match std::io::stdout().flush() {
@@ -141,7 +158,12 @@ impl MagicMiner {
 
         tx.add_input(&tx_in);
 
-        let p2pkh = TxOut::new(value - 300u64, &pay_to_script);
+        let minerid_fee = match miner_config.miner_id.enabled {
+            true => 300u64,
+            false => 218u64,
+        };
+
+        let p2pkh = TxOut::new(value - minerid_fee, &pay_to_script);
 
         tx.add_output(&p2pkh);
 
@@ -203,22 +225,37 @@ impl MagicMiner {
 
         let unwrapped = pow_result.unwrap();
 
-        let sig256 = unwrapped.0;
+        let sig = unwrapped.0;
         let ephemeral_key = unwrapped.1;
 
         let mut asm = "".to_owned();
 
-        asm.push_str(&sig256); // todo: improve this
+        let mut der = sig.to_der_bytes();
+        der.append(&mut sighash.clone());
+
+        let formatted_length = Script::get_pushdata_bytes(der.len()).unwrap();
+        asm.push_str(&format!("{:x}", formatted_length[0]));
+
+        asm.push_str(&sig.to_der_hex().to_string());
         asm.push_str(&hex::encode(&sighash));
-        asm.push_str(" ");
-        asm.push_str(&ephemeral_key.to_public_key().unwrap().to_hex().unwrap());
+
+        let public_key = &ephemeral_key.to_public_key().unwrap();
+
+        asm.push_str(&format!("{:x}", public_key.to_bytes().unwrap().len()));
+        asm.push_str(&public_key.to_hex().unwrap());
 
         let prev_txid = &input.get_prev_tx_id(None);
-        let unlocking_script = Script::from_asm_string(&asm).unwrap();
 
-        let tx_in = TxIn::new(&prev_txid, 0, &unlocking_script, None);
+        let unlocking_script = Script::from_hex(&asm).unwrap();
 
-        tx.set_input(0, &tx_in);
+        let tx_in_final = TxIn::new(
+            &prev_txid,
+            output_index.clone().try_into().unwrap(),
+            &unlocking_script,
+            None,
+        );
+
+        tx.set_input(0, &tx_in_final);
 
         println!(
             "\nSigned {} with {}\n",
@@ -226,11 +263,12 @@ impl MagicMiner {
             ephemeral_key.to_wif().unwrap()
         );
 
-        println!("{}\n", &tx.to_hex().unwrap().yellow());
-        println!("Final txid: {}", &tx.get_id_hex().unwrap().green());
+        let tx_hex = tx.to_hex().unwrap();
+
+        println!("{}\n", &tx_hex.yellow());
 
         if miner_config.autopublish {
-            // todo
+            MagicMiner::broadcast_tx(&tx_hex)
         }
     }
 
@@ -271,13 +309,13 @@ impl MagicMiner {
         let miner_config = match MinerConfig::get_config() {
             Ok(config) => config,
             Err(e) => {
-                println!("\nInvalid miner config.\n");
+                println!("\nInvalid miner config.\n{}", e);
                 MinerConfig::setup().unwrap()
             }
         };
 
         let mut to_address: String = miner_config.pay_to.clone();
-        let mut p2pkh_script: Script = Script::default();
+        let p2pkh_script: Script;
 
         loop {
             if to_address.is_empty() {
