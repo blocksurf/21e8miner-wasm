@@ -9,3 +9,5 @@ wasm-pack.log
 # will have compiled files and executables
 debug/
 target/
+
+config.toml

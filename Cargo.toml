@@ -17,6 +17,10 @@ rayon = "1.7.0"
 bsv = "2.0.1"
 colored = "2.0.0"
 hex = "0.4.3"
+serde = { version = "*", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 parking_lot = "0.12.1"
-reqwest = { version = "0.11.18", features = ["blocking"] }
+reqwest = { version = "0.11.18", features = ["blocking", "json"] }
+config = "0.13.3"
+directories = "5.0.1"
+toml = "0.7.4"
