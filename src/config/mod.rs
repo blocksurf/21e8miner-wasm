@@ -1,4 +1,4 @@
-use bsv::PrivateKey;
+use bsv::{P2PKHAddress, PrivateKey};
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::ErrorKind;
@@ -50,7 +50,7 @@ impl MinerConfig {
                 "# Private key in WIF format\n",
                 "priv_key = \"{}\"\n",
                 "# Select a message for Miner API\n",
-                "message = \"{}\"\n"
+                "message = \"{}\""
             ),
             pay_to, autopublish, enabled, priv_key, message
         )
@@ -77,7 +77,7 @@ impl MinerConfig {
 
         let default = MinerConfig::toml_string(
             "",
-            "false",
+            "true",
             "false",
             &PrivateKey::from_random().to_wif().unwrap(),
             "",
@@ -124,9 +124,9 @@ impl MinerConfig {
         }
 
         if input == "y" {
-            input = "true".to_string()
+            input = "true".into()
         } else if input == "n" {
-            input = "false".to_string()
+            input = "false".into()
         }
 
         input
@@ -134,11 +134,42 @@ impl MinerConfig {
 
     pub fn setup() {
         let enabled = MinerConfig::prompt("Enable Miner API?", PromptType::Bool);
-        let priv_key = MinerConfig::prompt("Private key in WIF format", PromptType::Text);
+
+        let mut priv_key: String;
+
+        loop {
+            priv_key = MinerConfig::prompt(
+                "Private key in WIF format (or press Enter to generate a new one)",
+                PromptType::Text,
+            );
+
+            if priv_key.is_empty() {
+                priv_key = PrivateKey::from_random().to_wif().unwrap();
+                break;
+            }
+
+            match PrivateKey::from_wif(&priv_key) {
+                Ok(_) => break,
+                Err(e) => {
+                    println!("{}\n", e);
+                }
+            }
+        }
 
         let message = MinerConfig::prompt("Select a message for Miner API", PromptType::Text);
 
-        let pay_to = MinerConfig::prompt("Pay solved puzzles out to P2PKH", PromptType::Text);
+        let mut pay_to: String;
+
+        loop {
+            pay_to = MinerConfig::prompt("Pay solved puzzles out to P2PKH", PromptType::Text);
+
+            match P2PKHAddress::from_string(&pay_to) {
+                Ok(_) => break,
+                Err(e) => {
+                    println!("{}\n", e);
+                }
+            }
+        }
 
         let autopublish =
             MinerConfig::prompt("Automatically publish solved puzzles?", PromptType::Bool);
@@ -146,6 +177,7 @@ impl MinerConfig {
         let mut config_file = OpenOptions::new()
             .read(true)
             .write(true)
+            .truncate(true)
             .create(true)
             .open("config.toml")
             .expect("Opening config.toml");
