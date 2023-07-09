@@ -271,7 +271,7 @@ impl MagicMiner {
         let miner_config = match MinerConfig::get_config() {
             Ok(config) => config,
             Err(e) => {
-                println!("\nInvalid miner config.");
+                println!("\nInvalid miner config.\n");
                 MinerConfig::setup().unwrap()
             }
         };
@@ -279,15 +279,15 @@ impl MagicMiner {
         let mut to_address: String = miner_config.pay_to.clone();
         let mut p2pkh_script: Script = Script::default();
 
-        // todo: rip polynym
-
         loop {
             if to_address.is_empty() {
                 to_address = MinerConfig::prompt(
-                    "Pay solved puzzles out to P2PKH address",
+                    "Pay solved puzzle out to (1handle, $handle, PayMail or p2pkh address)",
                     PromptType::Text,
                 );
             }
+
+            to_address = MinerConfig::get_address(&to_address);
 
             println!("Paying to {}", &to_address);
 

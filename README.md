@@ -28,9 +28,8 @@ Keeping this section up until I open & merge a PR for this issue.
 
 
 ## TODO:
-- [ ] Setup Miner ID
+- [x] Setup Miner ID
 - [x] multithreading
-- [ ] Resolve paymail addresses
 - [ ] Mine from cli
 - [ ] WASM modules
 

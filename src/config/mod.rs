@@ -29,8 +29,23 @@ pub enum PromptType {
 
 pub type PromptEntry = (String, PromptType);
 
+#[derive(Deserialize)]
+pub struct PolynymResponse {
+    address: String,
+}
+
 #[cfg_attr(docsrs, doc(cfg(feature = "config")))]
 impl MinerConfig {
+    pub fn get_address(input: &str) -> String {
+        let url = format!("https://api.polynym.io/getAddress/{}", input);
+        let p2pkh_address = reqwest::blocking::get(url)
+            .unwrap()
+            .json::<PolynymResponse>()
+            .unwrap();
+        println!("{}", &p2pkh_address.address);
+        p2pkh_address.address
+    }
+
     fn toml_string(
         pay_to: &str,
         autopublish: &str,
@@ -163,13 +178,13 @@ impl MinerConfig {
         let mut pay_to: String;
 
         loop {
-            pay_to = MinerConfig::prompt("Pay solved puzzles out to P2PKH", PromptType::Text);
+            pay_to = MinerConfig::prompt(
+                "Pay solved puzzle out to (1handle, $handle, PayMail or p2pkh address)",
+                PromptType::Text,
+            );
 
-            match P2PKHAddress::from_string(&pay_to) {
-                Ok(_) => break,
-                Err(e) => {
-                    println!("{}\n", e);
-                }
+            if !pay_to.is_empty() {
+                break;
             }
         }
 
@@ -191,7 +206,7 @@ impl MinerConfig {
             .write(settings.as_bytes())
             .expect("Write defaults to config.toml");
 
-        println!("Successfully created config.toml in the root directory.\n");
+        println!("\nSuccessfully created config.toml in the root directory.\n");
 
         toml::from_str::<MinerSettings>(&settings)
     }
