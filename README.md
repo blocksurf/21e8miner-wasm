@@ -7,11 +7,26 @@ Mine 21e8 faster, or don't, whatever.
 - multithreading
 - WASM modules for the browser
 
+## Installation
+
+Make sure you've got Cargo installed then run `cargo build --release` in the root directory.
+
+### Start Miner:
+
+```
+cargo run --bin start
+```
+
+### Configure Miner ID and default payout settings:
+
+```
+cargo run --bin setup
+```
 
 ## TODO:
 - [x] Setup Miner ID
 - [x] multithreading
-- [ ] Mine from cli
+- [] Mine from cli
 - [ ] WASM modules
 
 ### What is 21e8?
