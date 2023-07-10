@@ -9,24 +9,32 @@ Mine 21e8 faster, or don't, whatever.
 
 ## Installation
 
-Make sure you've got Cargo installed then run `cargo build --release` in the root directory.
+1) Install [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html)
+
+2) Run the following command from the root directory:
+
+```bash
+cargo build --release
+```
+
+The binaries will be located in `<project dir>/target/release`.
 
 ### Start Miner:
 
-```
+```bash
 cargo run --bin start
 ```
 
 ### Configure Miner ID and default payout settings:
 
-```
+```bash
 cargo run --bin setup
 ```
 
 ## TODO:
 - [x] Setup Miner ID
 - [x] multithreading
-- [] Mine from cli
+- [ ] Mine from cli
 - [ ] WASM modules
 
 ### What is 21e8?
