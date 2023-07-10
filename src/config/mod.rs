@@ -1,33 +1,26 @@
+pub mod prompt;
+use prompt::Prompt;
+
 use bsv::PrivateKey;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
-use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::path::Path;
 use toml::de::Error as TomlError;
 
-pub struct MinerConfig {}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MinerIDSettings {
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct MinerIDConfig {
     pub enabled: bool,
     pub priv_key: String,
     pub message: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MinerSettings {
-    pub miner_id: MinerIDSettings,
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct MinerConfig {
+    pub miner_id: MinerIDConfig,
     pub pay_to: String,
     pub autopublish: bool,
 }
-
-pub enum PromptType {
-    Text,
-    Bool,
-}
-
-pub type PromptEntry = (String, PromptType);
 
 #[derive(Deserialize)]
 pub struct PolynymResponse {
@@ -36,17 +29,41 @@ pub struct PolynymResponse {
 
 #[cfg_attr(docsrs, doc(cfg(feature = "config")))]
 impl MinerConfig {
-    pub fn get_address(input: &str) -> String {
-        let url = format!("https://api.polynym.io/getAddress/{}", input);
-        let p2pkh_address = reqwest::blocking::get(url)
-            .unwrap()
-            .json::<PolynymResponse>()
-            .unwrap();
-        println!("{}", &p2pkh_address.address);
-        p2pkh_address.address
+    pub fn new(
+        pay_to: String,
+        autopublish: bool,
+        enabled: bool,
+        priv_key: String,
+        message: String,
+    ) -> Self {
+        MinerConfig {
+            pay_to,
+            autopublish,
+            miner_id: {
+                MinerIDConfig {
+                    enabled,
+                    priv_key,
+                    message,
+                }
+            },
+        }
     }
 
-    fn toml_string(
+    pub fn default() -> MinerConfig {
+        MinerConfig {
+            pay_to: String::from(""),
+            autopublish: true,
+            miner_id: {
+                MinerIDConfig {
+                    enabled: false,
+                    priv_key: PrivateKey::from_random().to_wif().unwrap(),
+                    message: String::from(""),
+                }
+            },
+        }
+    }
+
+    fn to_formatted_string(
         pay_to: &str,
         autopublish: &str,
         enabled: &str,
@@ -71,159 +88,70 @@ impl MinerConfig {
         )
     }
 
-    pub fn get_config() -> Result<MinerSettings, TomlError> {
+    fn to_toml_string(&self) -> String {
+        MinerConfig::to_formatted_string(
+            &self.pay_to,
+            &self.autopublish.to_string(),
+            &self.miner_id.enabled.to_string(),
+            &self.miner_id.priv_key,
+            &self.miner_id.message,
+        )
+    }
+
+    pub fn from_toml_str(s: &str) -> Result<MinerConfig, TomlError> {
+        toml::from_str::<MinerConfig>(&s)
+    }
+
+    pub fn to_toml_bytes(self) -> Vec<u8> {
+        self.to_toml_string().into_bytes()
+    }
+
+    pub fn existing_config() -> bool {
+        Path::new("Config.toml").exists()
+    }
+
+    pub fn read_from_toml() -> Result<MinerConfig, TomlError> {
         let mut file: File = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open("config.toml")
-            .expect("Could not open config.toml");
+            .open("Config.toml")
+            .expect("Could not open Config.toml");
 
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
 
-        toml::from_str::<MinerSettings>(&content)
+        MinerConfig::from_toml_str(&content)
     }
 
-    fn default() -> File {
-        println!("Generating default config.toml...\n");
-
-        let mut file = File::create("config.toml").expect("Create new file");
-
-        let default = MinerConfig::toml_string(
-            "",
-            "true",
-            "false",
-            &PrivateKey::from_random().to_wif().unwrap(),
-            "",
-        );
-
-        file.write_all(default.as_bytes())
-            .expect("Write defaults to config.toml");
-
-        println!("Successfully created config.toml in the root directory.\n");
-
-        file
+    pub fn write_to_toml(config: MinerConfig) {
+        let mut file = File::create("Config.toml").unwrap();
+        file.write_all(&config.to_toml_bytes()).unwrap();
     }
 
-    pub fn open_or_default() -> File {
-        match OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open("config.toml")
-        {
-            Ok(file) => file,
-            Err(ref e) if e.kind() == ErrorKind::NotFound => {
-                println!("\nCould not find config.toml\n");
-                MinerConfig::default()
-            }
-            Err(e) => panic!("Error: {}\n", e),
+    pub fn get_address(input: &str) -> String {
+        let url = format!("https://api.polynym.io/getAddress/{}", input);
+        let p2pkh_address = reqwest::blocking::get(url)
+            .unwrap()
+            .json::<PolynymResponse>()
+            .unwrap();
+        println!("{}", &p2pkh_address.address);
+        p2pkh_address.address
+    }
+
+    fn optional_setup() -> MinerConfig {
+        match Prompt::confirm_prompt("Would you like to set up miner ID?") {
+            true => Prompt::run_setup(),
+            false => return MinerConfig::default(),
         }
     }
 
-    pub fn prompt(prompt: &str, prompt_type: PromptType) -> String {
-        match prompt_type {
-            PromptType::Text => print!("{}: ", prompt),
-            PromptType::Bool => print!("{} (y/n): ", prompt),
-        }
-
-        std::io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-
-        std::io::stdin().read_line(&mut input).unwrap();
-
-        if input.ends_with('\n') {
-            input.pop();
-            if input.ends_with('\r') {
-                input.pop();
-            }
-        }
-
-        if input == "y" {
-            input = "true".into()
-        } else if input == "n" {
-            input = "false".into()
-        }
-
-        input
-    }
-
-    pub fn setup() -> Result<MinerSettings, TomlError> {
-        let enabled = MinerConfig::prompt("Enable Miner API?", PromptType::Bool);
-
-        let mut priv_key: String;
-
-        loop {
-            priv_key = MinerConfig::prompt(
-                "Private key in WIF format (or press Enter to generate a new one)",
-                PromptType::Text,
-            );
-
-            if priv_key.is_empty() {
-                priv_key = PrivateKey::from_random().to_wif().unwrap();
-                break;
-            }
-
-            match PrivateKey::from_wif(&priv_key) {
-                Ok(_) => break,
-                Err(e) => {
-                    println!("{}\n", e);
-                }
-            }
-        }
-
-        let message = MinerConfig::prompt("Select a message for Miner API", PromptType::Text);
-
-        let mut pay_to: String;
-
-        loop {
-            pay_to = MinerConfig::prompt(
-                "Pay solved puzzle out to (1handle, $handle, PayMail or p2pkh address)",
-                PromptType::Text,
-            );
-
-            if !pay_to.is_empty() {
-                break;
-            }
-        }
-
-        let autopublish =
-            MinerConfig::prompt("Automatically publish solved puzzles?", PromptType::Bool);
-
-        let mut config_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open("config.toml")
-            .expect("Opening config.toml");
-
-        let settings =
-            MinerConfig::toml_string(&pay_to, &autopublish, &enabled, &priv_key, &message);
-
-        config_file
-            .write_all(settings.as_bytes())
-            .expect("Write defaults to config.toml");
-
-        println!("\nSuccessfully created config.toml in the root directory.\n");
-
-        toml::from_str::<MinerSettings>(&settings)
-    }
-
-    pub fn existing_config() -> bool {
-        Path::new("config.toml").exists()
-    }
-
-    pub fn init() {
+    pub fn start() {
         match MinerConfig::existing_config() {
-            true => {
-                let config = MinerConfig::get_config().unwrap();
-                println!("Config found!\n\n{:#?}", config)
-            }
+            true => println!("Found existing config."),
             false => {
-                MinerConfig::setup().unwrap();
+                MinerConfig::optional_setup();
             }
-        }
+        };
     }
 }

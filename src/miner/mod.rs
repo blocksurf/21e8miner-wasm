@@ -9,7 +9,8 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::miner_config::{MinerConfig, MinerSettings, PromptType};
+use crate::miner_config::MinerConfig;
+use crate::prompt::Prompt;
 
 pub struct MagicMiner {}
 
@@ -146,7 +147,7 @@ impl MagicMiner {
         output_index: usize,
         script: String,
         pay_to_script: Script,
-        miner_config: MinerSettings,
+        miner_config: MinerConfig,
     ) {
         let mut tx = Transaction::new(1, 0);
 
@@ -286,7 +287,7 @@ impl MagicMiner {
     }
 
     pub fn start() {
-        let txid = MinerConfig::prompt("Target TXID", PromptType::Text);
+        let txid = Prompt::text_prompt("Target TXID");
 
         if txid.is_empty() {
             return;
@@ -317,11 +318,11 @@ impl MagicMiner {
             return;
         };
 
-        let miner_config = match MinerConfig::get_config() {
+        let miner_config = match MinerConfig::read_from_toml() {
             Ok(config) => config,
             Err(e) => {
-                println!("\nInvalid miner config.\n{}", e);
-                MinerConfig::setup().unwrap()
+                eprintln!("\nInvalid miner config.\n{}", e);
+                Prompt::run_setup()
             }
         };
 
@@ -330,9 +331,8 @@ impl MagicMiner {
 
         loop {
             if to_address.is_empty() {
-                to_address = MinerConfig::prompt(
+                to_address = Prompt::text_prompt(
                     "Pay solved puzzle out to (1handle, $handle, PayMail or p2pkh address)",
-                    PromptType::Text,
                 );
             }
 
