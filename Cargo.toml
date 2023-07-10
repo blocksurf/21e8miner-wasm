@@ -8,7 +8,16 @@ license = "MIT"
 publish = false
 
 [lib]
+name = "magic_miner"
 crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "start"
+path = "src/bin/miner/bin.rs"
+
+[[bin]]
+name = "setup"
+path = "src/bin/setup/bin.rs"
 
 [dependencies]
 #wasm-bindgen = "0.2.87"
