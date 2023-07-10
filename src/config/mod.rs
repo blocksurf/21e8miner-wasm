@@ -98,7 +98,7 @@ impl MinerConfig {
             "",
         );
 
-        file.write(default.as_bytes())
+        file.write_all(default.as_bytes())
             .expect("Write defaults to config.toml");
 
         println!("Successfully created config.toml in the root directory.\n");
@@ -203,7 +203,7 @@ impl MinerConfig {
             MinerConfig::toml_string(&pay_to, &autopublish, &enabled, &priv_key, &message);
 
         config_file
-            .write(settings.as_bytes())
+            .write_all(settings.as_bytes())
             .expect("Write defaults to config.toml");
 
         println!("\nSuccessfully created config.toml in the root directory.\n");
@@ -223,7 +223,6 @@ impl MinerConfig {
             }
             false => {
                 MinerConfig::setup().unwrap();
-                return;
             }
         }
     }

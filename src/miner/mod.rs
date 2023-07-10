@@ -57,12 +57,12 @@ impl MagicMiner {
         };
     }
 
-    pub fn sign(sig_hash_preimage: &Vec<u8>, target: &str) -> Option<MinerResult> {
+    pub fn sign(sig_hash_preimage: &[u8], target: &str) -> Option<MinerResult> {
         let ephemeral_key = PrivateKey::from_random();
 
         let signature = ECDSA::sign_with_deterministic_k(
             &ephemeral_key,
-            &sig_hash_preimage,
+            sig_hash_preimage,
             bsv::SigningHash::Sha256d,
             false,
             false,
@@ -90,7 +90,7 @@ impl MagicMiner {
     }
 
     pub fn mine_parallel<'outer>(
-        sig_hash_preimage: &'outer Vec<u8>,
+        sig_hash_preimage: &'outer [u8],
         target: String,
     ) -> Option<MinerResult> {
         let nthreads = rayon::current_num_threads();
@@ -100,7 +100,7 @@ impl MagicMiner {
 
         rayon::in_place_scope(|scope| {
             for _ in 0..nthreads {
-                let borrow_preimage = sig_hash_preimage.clone();
+                let borrow_preimage = sig_hash_preimage.to_owned();
                 let cloned_target = target.clone();
                 let stop = stop.clone();
                 let pow_result = pow_result.clone();
@@ -150,23 +150,23 @@ impl MagicMiner {
     ) {
         let mut tx = Transaction::new(1, 0);
 
-        let target_output = match input_tx.get_output(output_index.clone()) {
+        let target_output = match input_tx.get_output(output_index) {
             Some(x) => x,
             None => return,
         };
 
         let value = &target_output.get_satoshis();
 
-        let target = script.split(" ").collect::<Vec<&str>>()[1];
+        let target = script.split('\u{0020}').collect::<Vec<&str>>()[1];
 
         let mut tx_in = TxIn::default();
 
         let locking_script = target_output.get_script_pub_key();
 
-        tx_in.set_satoshis(value.clone());
+        tx_in.set_satoshis(*value);
         tx_in.set_locking_script(&locking_script);
         tx_in.set_prev_tx_id(&input_tx.get_id_bytes().unwrap());
-        tx_in.set_vout(output_index.clone().try_into().unwrap());
+        tx_in.set_vout(output_index.try_into().unwrap());
 
         tx.add_input(&tx_in);
 
@@ -249,7 +249,7 @@ impl MagicMiner {
         let formatted_length = Script::get_pushdata_bytes(der.len()).unwrap();
         asm.push_str(&format!("{:x}", formatted_length[0]));
 
-        asm.push_str(&sig.to_der_hex().to_string());
+        asm.push_str(&sig.to_der_hex());
         asm.push_str(&hex::encode(&sighash));
 
         let public_key = &ephemeral_key.to_public_key().unwrap();
@@ -262,8 +262,8 @@ impl MagicMiner {
         let unlocking_script = Script::from_hex(&asm).unwrap();
 
         let tx_in_final = TxIn::new(
-            &prev_txid,
-            output_index.clone().try_into().unwrap(),
+            prev_txid,
+            output_index.try_into().unwrap(),
             &unlocking_script,
             None,
         );
@@ -306,11 +306,9 @@ impl MagicMiner {
                 None => continue,
             };
 
-            if target_script.is_some() {
-                if MagicMiner::is_21e8_out(&target_script.as_ref().unwrap()) {
-                    index = Some(i);
-                    break;
-                }
+            if target_script.is_some() && MagicMiner::is_21e8_out(target_script.as_ref().unwrap()) {
+                index = Some(i);
+                break;
             }
         }
 
@@ -349,7 +347,7 @@ impl MagicMiner {
                 }
                 Err(e) => {
                     println!("{}\n", e);
-                    return;
+                    continue;
                 }
             };
         }
