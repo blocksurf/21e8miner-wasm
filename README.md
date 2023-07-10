@@ -7,12 +7,6 @@ Mine 21e8 faster, or don't, whatever.
 - multithreading
 - WASM modules for the browser
 
-# :warning: Disclaimer
-
-There are some compatibility issues between [bsv.js](https://github.com/moneybutton/bsv) and [bsv-wasm](https://github.com/Firaenix/bsv-wasm) when generating the Miner ID signature.
-
-If you want full compatibility with the OG miner, ***disable*** Miner ID. Otherwise you're going to get different signatures even with identical inputs.
-
 
 ## TODO:
 - [x] Setup Miner ID
