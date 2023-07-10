@@ -21,7 +21,7 @@ impl MagicMiner {
     pub fn is_21e8_out(script: &Script) -> bool {
         let script_template: ScriptTemplate = ScriptTemplate::from_match_tokens(vec![
             MatchToken::Data(32, bsv::DataLengthConstraints::Equals),
-            MatchToken::Push(vec![33, 232]),
+            MatchToken::Data(2, bsv::DataLengthConstraints::GreaterThanOrEquals),
             MatchToken::OpCode(OpCodes::OP_SIZE),
             MatchToken::OpCode(OpCodes::OP_4),
             MatchToken::OpCode(OpCodes::OP_PICK),
