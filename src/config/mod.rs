@@ -1,4 +1,4 @@
-use bsv::{P2PKHAddress, PrivateKey};
+use bsv::PrivateKey;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::ErrorKind;

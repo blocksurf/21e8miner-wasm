@@ -53,6 +53,7 @@ impl MagicMiner {
             &sig_hash_preimage,
             bsv::SigningHash::Sha256d,
             false,
+            false,
         )
         .unwrap();
 
@@ -174,7 +175,8 @@ impl MagicMiner {
                 &miner_priv,
                 &input_tx.to_bytes().unwrap(),
                 SigningHash::Sha256d,
-                false,
+                true,
+                true,
             )
             .unwrap();
 
