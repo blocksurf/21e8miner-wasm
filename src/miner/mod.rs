@@ -1,6 +1,6 @@
 use bsv::{
-    Hash, P2PKHAddress, PrivateKey, Script, ScriptTemplate, SigHash, Signature, SigningHash,
-    Transaction, TxIn, TxOut, ECDSA,
+    Hash, MatchToken, OpCodes, P2PKHAddress, PrivateKey, Script, ScriptTemplate, SigHash,
+    Signature, SigningHash, Transaction, TxIn, TxOut, ECDSA,
 };
 use colored::Colorize;
 use serde_json::json;
@@ -18,9 +18,21 @@ pub struct MinerResult(Signature, PrivateKey);
 #[cfg_attr(docsrs, doc(cfg(feature = "miner")))]
 impl MagicMiner {
     pub fn is_21e8_out(script: &Script) -> bool {
-        let script_template = ScriptTemplate::from_asm_string(
-					"OP_DATA=32 21e8 OP_SIZE OP_4 OP_PICK OP_SHA256 OP_SWAP OP_SPLIT OP_DROP OP_EQUALVERIFY OP_DROP OP_CHECKSIG",
-				).unwrap();
+        let script_template: ScriptTemplate = ScriptTemplate::from_match_tokens(vec![
+            MatchToken::Data(32, bsv::DataLengthConstraints::Equals),
+            MatchToken::Push(vec![33, 232]),
+            MatchToken::OpCode(OpCodes::OP_SIZE),
+            MatchToken::OpCode(OpCodes::OP_4),
+            MatchToken::OpCode(OpCodes::OP_PICK),
+            MatchToken::OpCode(OpCodes::OP_SHA256),
+            MatchToken::OpCode(OpCodes::OP_SWAP),
+            MatchToken::OpCode(OpCodes::OP_SPLIT),
+            MatchToken::OpCode(OpCodes::OP_DROP),
+            MatchToken::OpCode(OpCodes::OP_EQUALVERIFY),
+            MatchToken::OpCode(OpCodes::OP_DROP),
+            MatchToken::OpCode(OpCodes::OP_CHECKSIG),
+        ])
+        .unwrap();
         script.is_match(&script_template)
     }
 
