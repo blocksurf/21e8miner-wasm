@@ -7,17 +7,24 @@ Mine 21e8 faster, or don't, whatever.
 - multithreading
 - WASM modules for the browser
 
-## Installation
+## Compiling
 
-1) Install [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html)
+First, you'll want to check out this repository
 
-2) Run the following command from the root directory:
+```
+git clone https://github.com/blocksurf/21e8miner-wasm.git
+cd 21e8miner-wasm
+```
+
+With [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) already installed, you can run:
 
 ```bash
 cargo build --release
 ```
 
-The binaries will be located in `<project dir>/target/release`.
+The binaries will be located in `<project dir>/target/release`
+
+## Running 21e8miner
 
 ### Start Miner:
 
@@ -30,6 +37,17 @@ cargo run --bin start
 ```bash
 cargo run --bin setup
 ```
+
+## Publish 21e8 Jobs
+
+Use this TX template with a certain output
+
+```
+<sha256 hash of something you want PoW for> <21e8 + target string in hex> OP_SIZE OP_4 OP_PICK OP_SHA256 OP_SWAP OP_SPLIT OP_DROP OP_EQUALVERIFY OP_DROP OP_CHECKSIG>
+```
+
+Here's a jsfiddle to get you started: https://jsfiddle.net/fkt7qb15/
+
 
 ## TODO:
 - [x] Setup Miner ID
