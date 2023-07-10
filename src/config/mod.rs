@@ -135,7 +135,6 @@ impl MinerConfig {
             .unwrap()
             .json::<PolynymResponse>()
             .unwrap();
-        println!("{}", &p2pkh_address.address);
         p2pkh_address.address
     }
 
