@@ -1,6 +1,6 @@
 use bsv::{
-    Hash, MatchToken, OpCodes, P2PKHAddress, PrivateKey, Script, ScriptTemplate, SigHash,
-    Signature, SigningHash, Transaction, TxIn, TxOut, ECDSA,
+    Hash, MatchToken, OpCodes, P2PKHAddress, PrivateKey, Script, ScriptBit, ScriptTemplate,
+    SigHash, Signature, SigningHash, Transaction, TxIn, TxOut, ECDSA,
 };
 use colored::Colorize;
 use serde_json::json;
@@ -18,6 +18,14 @@ pub struct MinerResult(Signature, PrivateKey);
 
 #[cfg_attr(docsrs, doc(cfg(feature = "miner")))]
 impl MagicMiner {
+    fn is_21e8(bit: ScriptBit) -> bool {
+        let target = match bit {
+            ScriptBit::Push(value) => value,
+            _ => return false,
+        };
+        target[0] == 33 && target[1] == 232
+    }
+
     pub fn is_21e8_out(script: &Script) -> bool {
         let script_template: ScriptTemplate = ScriptTemplate::from_match_tokens(vec![
             MatchToken::Data(32, bsv::DataLengthConstraints::Equals),
@@ -34,7 +42,10 @@ impl MagicMiner {
             MatchToken::OpCode(OpCodes::OP_CHECKSIG),
         ])
         .unwrap();
-        script.is_match(&script_template)
+
+        let target = script.get_script_bit(1).unwrap();
+
+        script.is_match(&script_template) && MagicMiner::is_21e8(target)
     }
 
     pub fn get_tx(txid: &str) -> Transaction {
@@ -207,8 +218,8 @@ impl MagicMiner {
 
             // manually build OP_RETURN script
 
-            let op_0 = vec![0]; // Script::from_script_bits(vec![ScriptBit::OpCode(OpCodes::OP_0)]).to_bytes();
-            let op_return = vec![106]; //Script::from_script_bits(vec![ScriptBit::OpCode(OpCodes::OP_RETURN)]).to_bytes();
+            let op_0 = vec![0]; // OP_0
+            let op_return = vec![106]; // OP_RETURN
 
             let op_return_script =
                 Script::from_chunks(vec![op_0, op_return, safe_data_output.to_bytes()]).unwrap();
