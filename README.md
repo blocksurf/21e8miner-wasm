@@ -29,13 +29,13 @@ The binaries will be located in `<project dir>/target/release`
 ### Start Miner:
 
 ```bash
-cargo run --bin start
+cargo run --release --bin start
 ```
 
 ### Configure Miner ID and default payout settings:
 
 ```bash
-cargo run --bin setup
+cargo run --release --bin setup
 ```
 
 ## Publish 21e8 Jobs
