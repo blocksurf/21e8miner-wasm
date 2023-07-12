@@ -15,7 +15,7 @@ pub struct MinerIDConfig {
     pub message: String,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MinerConfig {
     pub miner_id: MinerIDConfig,
     pub pay_to: String,
@@ -25,6 +25,22 @@ pub struct MinerConfig {
 #[derive(Deserialize)]
 pub struct PolynymResponse {
     address: String,
+}
+
+impl Default for MinerConfig {
+    fn default() -> Self {
+        MinerConfig {
+            pay_to: String::from(""),
+            autopublish: true,
+            miner_id: {
+                MinerIDConfig {
+                    enabled: false,
+                    priv_key: PrivateKey::from_random().to_wif().unwrap(),
+                    message: String::from(""),
+                }
+            },
+        }
+    }
 }
 
 #[cfg_attr(docsrs, doc(cfg(feature = "config")))]
@@ -44,20 +60,6 @@ impl MinerConfig {
                     enabled,
                     priv_key,
                     message,
-                }
-            },
-        }
-    }
-
-    pub fn default() -> MinerConfig {
-        MinerConfig {
-            pay_to: String::from(""),
-            autopublish: true,
-            miner_id: {
-                MinerIDConfig {
-                    enabled: false,
-                    priv_key: PrivateKey::from_random().to_wif().unwrap(),
-                    message: String::from(""),
                 }
             },
         }
@@ -99,7 +101,7 @@ impl MinerConfig {
     }
 
     pub fn from_toml_str(s: &str) -> Result<MinerConfig, TomlError> {
-        toml::from_str::<MinerConfig>(&s)
+        toml::from_str::<MinerConfig>(s)
     }
 
     pub fn to_toml_bytes(self) -> Vec<u8> {
@@ -141,7 +143,7 @@ impl MinerConfig {
     fn optional_setup() -> MinerConfig {
         match Prompt::confirm_prompt("Would you like to set up miner ID?") {
             true => Prompt::run_setup(),
-            false => return MinerConfig::default(),
+            false => MinerConfig::default(),
         }
     }
 
