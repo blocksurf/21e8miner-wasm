@@ -5,7 +5,6 @@ use bsv::{
 use colored::Colorize;
 use serde_json::json;
 use std::collections::HashMap;
-use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -18,12 +17,12 @@ pub struct MinerResult(Signature, PrivateKey);
 
 #[cfg_attr(docsrs, doc(cfg(feature = "miner")))]
 impl MagicMiner {
-    fn is_21e8(bit: ScriptBit) -> bool {
-        let target = match bit {
-            ScriptBit::Push(value) => value,
-            _ => return false,
-        };
-        target[0] == 33 && target[1] == 232
+    pub fn is_21e8(target_bit: ScriptBit) -> bool {
+        if let Some(target) = target_bit.to_vec() {
+            target[0] == 33 && target[1] == 232
+        } else {
+            false
+        }
     }
 
     pub fn is_21e8_out(script: &Script) -> bool {
@@ -69,7 +68,7 @@ impl MagicMiner {
         };
     }
 
-    pub fn sign(sig_hash_preimage: &[u8], target: &str) -> Option<MinerResult> {
+    pub fn sign(sig_hash_preimage: &[u8], target: &[u8]) -> Option<MinerResult> {
         let ephemeral_key = PrivateKey::from_random();
 
         let signature = ECDSA::sign_with_deterministic_k(
@@ -86,25 +85,18 @@ impl MagicMiner {
         let mut hashbuf = signature.to_der_bytes();
         hashbuf.extend(&sighash_flag);
 
-        let sig256 = Hash::sha_256(&hashbuf).to_hex();
+        let sig256 = Hash::sha_256(&hashbuf).to_bytes();
 
         if sig256.starts_with(target) {
-            println!("\r{}", sig256.green());
-            return Some(MinerResult(signature, ephemeral_key));
+            println!("\n\r{}", hex::encode(sig256).red());
+            Some(MinerResult(signature, ephemeral_key))
         } else {
-            print!("\r{}", sig256.red());
-            match std::io::stdout().flush() {
-                Ok(_) => print!(""),
-                Err(error) => println!("{}", error),
-            }
-            return None;
+            print!("\r{}", hex::encode(sig256).red());
+            None
         }
     }
 
-    pub fn mine_parallel<'outer>(
-        sig_hash_preimage: &'outer [u8],
-        target: String,
-    ) -> Option<MinerResult> {
+    pub fn mine_parallel(sig_hash_preimage: &[u8], target: &[u8]) -> Option<MinerResult> {
         let nthreads = rayon::current_num_threads();
         let stop = Arc::new(AtomicBool::new(false));
         let pow_result = Arc::new(parking_lot::const_mutex::<Option<MinerResult>>(None));
@@ -113,7 +105,7 @@ impl MagicMiner {
         rayon::in_place_scope(|scope| {
             for _ in 0..nthreads {
                 let borrow_preimage = sig_hash_preimage.to_owned();
-                let cloned_target = target.clone();
+                let cloned_target = target.to_owned();
                 let stop = stop.clone();
                 let pow_result = pow_result.clone();
 
@@ -143,20 +135,16 @@ impl MagicMiner {
         });
 
         if let Ok(suffix) = Arc::try_unwrap(pow_result) {
-            if let Some(result) = suffix.into_inner() {
-                return Some(result);
-            } else {
-                return None;
-            }
+            suffix.into_inner().take()
         } else {
-            return None;
-        };
+            None
+        }
     }
 
     pub fn mine_id(
         input_tx: Transaction,
         output_index: usize,
-        script: String,
+        target: Vec<u8>,
         pay_to_script: Script,
         miner_config: MinerConfig,
     ) {
@@ -168,8 +156,6 @@ impl MagicMiner {
         };
 
         let value = &target_output.get_satoshis();
-
-        let target = script.split('\u{0020}').collect::<Vec<&str>>()[1];
 
         let mut tx_in = TxIn::default();
 
@@ -245,7 +231,7 @@ impl MagicMiner {
         let mut pow_result: Option<MinerResult> = None;
 
         while pow_result.is_none() {
-            pow_result = MagicMiner::mine_parallel(&sig_hash_preimage, target.to_string());
+            pow_result = MagicMiner::mine_parallel(&sig_hash_preimage, &target);
         }
 
         let unwrapped = pow_result.unwrap();
@@ -284,7 +270,7 @@ impl MagicMiner {
 
         println!(
             "\nSigned {} with {}\n",
-            target,
+            hex::encode(target),
             ephemeral_key.to_wif().unwrap()
         );
 
@@ -310,23 +296,26 @@ impl MagicMiner {
 
         let mut index = None;
         let outputs = tx.get_noutputs();
-        let mut target_script: Option<Script> = None;
+        let mut target_script: Script = Script::default();
 
         for i in 0..outputs {
             target_script = match tx.get_output(i) {
-                Some(v) => Some(v.get_script_pub_key()),
+                Some(output) => output.get_script_pub_key(),
                 None => continue,
             };
 
-            if target_script.is_some() && MagicMiner::is_21e8_out(target_script.as_ref().unwrap()) {
+            if MagicMiner::is_21e8_out(&target_script) {
                 index = Some(i);
                 break;
             }
         }
 
-        if index.is_none() {
-            println!("No 21e8 scripts found.");
-            return;
+        let target = match index.is_some() {
+            true => target_script.get_script_bit(1).unwrap().to_vec().unwrap(),
+            false => {
+                println!("No 21e8 scripts found.");
+                return;
+            }
         };
 
         let miner_config = match MinerConfig::read_from_toml() {
@@ -365,12 +354,6 @@ impl MagicMiner {
 
         println!("Mining TX {} output {:?}", txid.trim(), &index.unwrap());
 
-        MagicMiner::mine_id(
-            tx,
-            index.unwrap(),
-            target_script.unwrap().to_asm_string(),
-            p2pkh_script,
-            miner_config,
-        );
+        MagicMiner::mine_id(tx, index.unwrap(), target, p2pkh_script, miner_config);
     }
 }
