@@ -2,7 +2,6 @@ use bsv::{
     Hash, MatchToken, OpCodes, P2PKHAddress, PrivateKey, Script, ScriptBit, ScriptTemplate,
     SigHash, Signature, SigningHash, Transaction, TxIn, TxOut, ECDSA,
 };
-use colored::Colorize;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,6 +13,12 @@ use crate::prompt::Prompt;
 pub struct MagicMiner {}
 
 pub struct MinerResult(Signature, PrivateKey);
+
+// ANSI escape
+const RED: &str = "\x1b[32m";
+const GREEN: &str = "\x1b[31m";
+const YELLOW: &str = "\x1b[33m";
+const RESET_COLOR: &str = "\x1B[0m";
 
 #[cfg_attr(docsrs, doc(cfg(feature = "miner")))]
 impl MagicMiner {
@@ -88,10 +93,10 @@ impl MagicMiner {
         let sig256 = Hash::sha_256(&hashbuf).to_bytes();
 
         if sig256.starts_with(target) {
-            println!("\n\r{}", hex::encode(sig256).red());
+            println!("\n\r{}{}", RED, hex::encode(sig256));
             Some(MinerResult(signature, ephemeral_key))
         } else {
-            print!("\r{}", hex::encode(sig256).red());
+            print!("\r{}{}", GREEN, hex::encode(sig256));
             None
         }
     }
@@ -234,6 +239,8 @@ impl MagicMiner {
             pow_result = MagicMiner::mine_parallel(&sig_hash_preimage, &target);
         }
 
+        print!("{}", RESET_COLOR);
+
         let unwrapped = pow_result.unwrap();
 
         let sig = unwrapped.0;
@@ -276,7 +283,7 @@ impl MagicMiner {
 
         let tx_hex = tx.to_hex().unwrap();
 
-        println!("{}\n", &tx_hex.yellow());
+        println!("{}{}{}\n", YELLOW, &tx_hex, RESET_COLOR);
 
         if miner_config.autopublish {
             MagicMiner::broadcast_tx(&tx_hex)
