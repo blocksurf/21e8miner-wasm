@@ -10,6 +10,7 @@ wasm-pack.log
 debug/
 target/
 
+/solved
 Config.toml
 start
 setup

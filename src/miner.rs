@@ -1,35 +1,18 @@
 use crate::prompt::Prompt;
-use crate::MinerConfig;
+use crate::utils;
+use crate::Config;
+use asky::Text;
 use bsv::{
     Hash, MatchToken, OpCodes, P2PKHAddress, PrivateKey, Script, ScriptBit, ScriptTemplate,
     SigHash, SighashSignature, Transaction, TxIn, TxOut, ECDSA,
 };
 use serde_json::json;
 use std::collections::HashMap;
-use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
-use std::sync::OnceLock;
-
-#[derive(Debug, Clone)]
-pub struct RuntimeError(String);
-
-impl fmt::Display for RuntimeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Thread error: {}", self.0)
-    }
-}
-
-impl<E> From<E> for RuntimeError
-where
-    E: std::error::Error + Send + 'static,
-{
-    fn from(err: E) -> Self {
-        RuntimeError(err.to_string())
-    }
-}
+use std::time::Duration;
 
 pub type Res<T> = anyhow::Result<T>;
 
@@ -41,6 +24,8 @@ pub struct MinerResult(SighashSignature, PrivateKey);
 const RED: &str = "\x1b[31m";
 const GREEN: &str = "\x1b[32m";
 const YELLOW: &str = "\x1b[33m";
+const PURPLE: &str = "\x1b[35m";
+const CYAN: &str = "\x1b[36m";
 const RESET_COLOR: &str = "\x1B[0m";
 
 #[cfg_attr(docsrs, doc(cfg(feature = "miner")))]
@@ -126,24 +111,28 @@ impl MagicMiner {
             if sig256.starts_with(&target_ref) {
                 stop_signal.store(true, Ordering::Relaxed);
 
-                println!("\n\r{}{}", GREEN, hex::encode(sig256));
+                std::thread::sleep(Duration::from_millis(100));
+
+                println!("\r🪄 {GREEN}{}", hex::encode(sig256));
                 sender
                     .send(MinerResult(sighash_signature, ephemeral_key))
                     .unwrap();
 
                 return;
             } else if !stop_signal.load(Ordering::Relaxed) {
-                print!("\r{}{}", RED, hex::encode(sig256));
+                print!("\r{RED}{}", hex::encode(sig256));
             }
         }
     }
 
     /// This is where we set up our multithreading
     pub fn mine_target(sig_hash_preimage: &[u8], target: &[u8]) -> Res<MinerResult> {
-        let (sender, receiver) = mpsc::channel::<MinerResult>();
         let available_threads = std::thread::available_parallelism()?.get();
+        println!("{CYAN}[{} threads]{RESET_COLOR}", available_threads);
+        println!();
 
-        println!("{} available threads", available_threads);
+        let (sender, receiver) = mpsc::channel::<MinerResult>();
+
         let stop_signal = Arc::new(AtomicBool::new(false));
 
         let mut handles = Vec::with_capacity(available_threads);
@@ -190,7 +179,7 @@ impl MagicMiner {
         output_index: usize,
         target: &[u8],
         pay_to_script: Script,
-        miner_config: MinerConfig,
+        miner_config: Config,
     ) -> Res<()> {
         let mut tx = Transaction::new(1, 0);
 
@@ -265,7 +254,7 @@ impl MagicMiner {
 
         let MinerResult(sig, ephemeral_key) = MagicMiner::mine_target(&sig_hash_preimage, target)?;
 
-        print!("{}", RESET_COLOR);
+        print!("{RESET_COLOR}");
 
         let public_key = &ephemeral_key.to_public_key()?;
 
@@ -281,7 +270,7 @@ impl MagicMiner {
         tx.set_input(0, &tx_in_final);
 
         println!(
-            "\nSigned {} with {}\n",
+            "\nSigned {GREEN}{}{RESET_COLOR} with {}\n",
             hex::encode(target),
             ephemeral_key.to_wif()?
         );
@@ -292,16 +281,20 @@ impl MagicMiner {
 
         if miner_config.autopublish {
             let response = MagicMiner::broadcast_tx(&tx_hex).await?;
-            println!("Success! {}", response);
+            println!("Success! {response}");
+        }
+
+        if miner_config.autosave {
+            utils::write_to_file(&from.get_id_hex()?, &tx_hex)?;
         }
 
         Ok(())
     }
 
     pub async fn start() -> Res<()> {
-        let txid = Prompt::text_prompt("Target TXID");
+        let txid = Text::new("Target TXID").prompt()?;
 
-        if txid.is_empty() || !is_valid_txid(&txid) {
+        if txid.is_empty() || !utils::is_valid_txid(&txid) {
             println!("Invalid txid");
             return Ok(());
         }
@@ -332,11 +325,11 @@ impl MagicMiner {
             }
         };
 
-        let miner_config = match MinerConfig::read_from_toml() {
+        let miner_config = match Config::read_from_toml() {
             Ok(config) => config,
             Err(e) => {
                 eprintln!("\nInvalid miner config.\n{}", e);
-                Prompt::run_setup()
+                Prompt::run_setup()?
             }
         };
 
@@ -344,9 +337,9 @@ impl MagicMiner {
         let p2pkh_script: Script;
 
         while to_address.is_empty() {
-            to_address = Prompt::text_prompt(
-                "Pay solved puzzle out to (1handle, $handle, PayMail or p2pkh address)",
-            );
+            to_address =
+                Text::new("Pay solved puzzle out to (1handle, $handle, PayMail or p2pkh address)")
+                    .prompt()?;
         }
 
         loop {
@@ -359,43 +352,26 @@ impl MagicMiner {
                     println!("{}\n", e);
 
                     // try polynym
-                    to_address = match MinerConfig::fetch_polynym_address(&to_address).await {
+                    to_address = match Config::fetch_polynym_address(&to_address).await {
                         Ok(v) => {
                             println!("Polynym address found: {}", v);
                             v
                         }
                         Err(e) => {
                             println!("Could not fetch address from Polynym: {:?}", e);
-                            Prompt::text_prompt("Pay solved puzzle out to (P2PKH address)")
+                            Text::new("Pay solved puzzle out to (P2PKH address)").prompt()?
                         }
                     };
                 }
             };
         }
 
-        println!("Paying to -> {}", &to_address);
-
-        println!("Mining TX {} output {:?}", txid.trim(), &index.unwrap());
+        println!(
+            "{GREEN}■{RESET_COLOR} Paying to: {PURPLE}{}{RESET_COLOR}",
+            &to_address
+        );
+        print!("{GREEN}■{RESET_COLOR} Mining output {} ", &index.unwrap());
 
         MagicMiner::solve_puzzle(tx, index.unwrap(), &target, p2pkh_script, miner_config).await
     }
-}
-
-fn is_valid_txid(txid: &str) -> bool {
-    if txid.len() != 64 {
-        println!("not 64 char");
-        return false;
-    }
-    txid.bytes().all(|byte| hex_lookup()[byte as usize])
-}
-
-fn hex_lookup() -> &'static [bool; 256] {
-    static HEX_LOOKUP: OnceLock<[bool; 256]> = OnceLock::new();
-    HEX_LOOKUP.get_or_init(|| {
-        let mut lookup = [false; 256];
-        for &c in b"0123456789ABCDEFabcdef" {
-            lookup[c as usize] = true;
-        }
-        lookup
-    })
 }

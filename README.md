@@ -52,7 +52,7 @@ Here's a jsfiddle to get you started: https://jsfiddle.net/fkt7qb15/
 ## TODO:
 - [x] Setup Miner ID
 - [x] multithreading
-- [ ] Mine from cli
+- [x] Mine from cli
 - [ ] WASM modules
 
 ### What is 21e8?

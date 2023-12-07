@@ -1,8 +1,4 @@
-pub mod prompt;
-use prompt::*;
-
-pub mod cli;
-
+use crate::Prompt;
 use crate::Res;
 use bsv::PrivateKey;
 use serde::{Deserialize, Serialize};
@@ -19,10 +15,11 @@ pub struct MinerIDConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MinerConfig {
+pub struct Config {
     pub miner_id: MinerIDConfig,
     pub pay_to: String,
     pub autopublish: bool,
+    pub autosave: bool,
 }
 
 #[derive(Deserialize)]
@@ -30,11 +27,12 @@ pub struct PolynymResponse {
     address: String,
 }
 
-impl Default for MinerConfig {
+impl Default for Config {
     fn default() -> Self {
-        MinerConfig {
+        Config {
             pay_to: String::from(""),
             autopublish: true,
+            autosave: true,
             miner_id: {
                 MinerIDConfig {
                     enabled: false,
@@ -47,17 +45,19 @@ impl Default for MinerConfig {
 }
 
 #[cfg_attr(docsrs, doc(cfg(feature = "config")))]
-impl MinerConfig {
+impl Config {
     pub fn new(
         pay_to: String,
         autopublish: bool,
+        autosave: bool,
         enabled: bool,
         priv_key: String,
         message: String,
     ) -> Self {
-        MinerConfig {
+        Config {
             pay_to,
             autopublish,
+            autosave,
             miner_id: {
                 MinerIDConfig {
                     enabled,
@@ -71,6 +71,7 @@ impl MinerConfig {
     fn to_formatted_string(
         pay_to: &str,
         autopublish: &str,
+        autosave: &str,
         enabled: &str,
         priv_key: &str,
         message: &str,
@@ -81,6 +82,7 @@ impl MinerConfig {
                 "pay_to = \"{}\"\n",
                 "# Automatically publish solved puzzles\n",
                 "autopublish = {}\n",
+                "autosave = {}\n",
                 "\n[miner_id]\n",
                 "# Enable Miner API\n",
                 "enabled = {}\n",
@@ -89,22 +91,23 @@ impl MinerConfig {
                 "# Select a message for Miner API\n",
                 "message = \"{}\""
             ),
-            pay_to, autopublish, enabled, priv_key, message
+            pay_to, autopublish, autosave, enabled, priv_key, message
         )
     }
 
     fn to_toml_string(&self) -> String {
-        MinerConfig::to_formatted_string(
+        Config::to_formatted_string(
             &self.pay_to,
             &self.autopublish.to_string(),
+            &self.autosave.to_string(),
             &self.miner_id.enabled.to_string(),
             &self.miner_id.priv_key,
             &self.miner_id.message,
         )
     }
 
-    pub fn from_toml_str(s: &str) -> Result<MinerConfig, TomlError> {
-        toml::from_str::<MinerConfig>(s)
+    pub fn from_toml_str(s: &str) -> Result<Config, TomlError> {
+        toml::from_str::<Config>(s)
     }
 
     pub fn to_toml_bytes(self) -> Vec<u8> {
@@ -115,7 +118,7 @@ impl MinerConfig {
         Path::new("Config.toml").exists()
     }
 
-    pub fn read_from_toml() -> Result<MinerConfig, TomlError> {
+    pub fn read_from_toml() -> Result<Config, TomlError> {
         let mut file: File = OpenOptions::new()
             .read(true)
             .write(true)
@@ -126,10 +129,10 @@ impl MinerConfig {
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
 
-        MinerConfig::from_toml_str(&content)
+        Config::from_toml_str(&content)
     }
 
-    pub fn write_to_toml(config: MinerConfig) {
+    pub fn write_to_toml(config: Config) {
         let mut file = File::create("Config.toml").unwrap();
         file.write_all(&config.to_toml_bytes()).unwrap();
     }
@@ -145,23 +148,27 @@ impl MinerConfig {
         Ok(p2pkh_address.address)
     }
 
-    fn optional_setup() -> MinerConfig {
-        match Prompt::confirm_prompt("Would you like to set up miner ID?") {
+    fn optional_setup() -> Res<Config> {
+        match asky::Confirm::new("Would you like to set up miner ID?").prompt()? {
             true => Prompt::run_setup(),
-            false => MinerConfig::default(),
+            false => Ok(Config::default()),
         }
     }
 }
 
-pub fn start() -> Res<()> {
-    match MinerConfig::existing_config() {
+pub fn init() -> Res<()> {
+    let found_config = Config::existing_config();
+
+    let run_setup = match found_config {
         true => {
-            println!("Found existing config.");
+            asky::Confirm::new("Found existing config. Would you like to overwrite it?").prompt()?
         }
-        false => {
-            MinerConfig::optional_setup();
-        }
+        false => false,
     };
+
+    if run_setup {
+        Config::optional_setup()?;
+    }
 
     Ok(())
 }
