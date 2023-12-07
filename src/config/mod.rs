@@ -1,9 +1,9 @@
 pub mod prompt;
-pub use prompt::*;
+use prompt::*;
 
 pub mod cli;
-pub use cli::*;
 
+use crate::Res;
 use bsv::PrivateKey;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
@@ -134,13 +134,15 @@ impl MinerConfig {
         file.write_all(&config.to_toml_bytes()).unwrap();
     }
 
-    pub fn get_address(input: &str) -> String {
+    pub async fn fetch_polynym_address(input: &str) -> Res<String> {
         let url = format!("https://api.polynym.io/getAddress/{}", input);
-        let p2pkh_address = reqwest::blocking::get(url)
-            .unwrap()
+        let p2pkh_address = reqwest::Client::new()
+            .get(url)
+            .send()
+            .await?
             .json::<PolynymResponse>()
-            .unwrap();
-        p2pkh_address.address
+            .await?;
+        Ok(p2pkh_address.address)
     }
 
     fn optional_setup() -> MinerConfig {
@@ -149,13 +151,17 @@ impl MinerConfig {
             false => MinerConfig::default(),
         }
     }
+}
 
-    pub fn start() {
-        match MinerConfig::existing_config() {
-            true => println!("Found existing config."),
-            false => {
-                MinerConfig::optional_setup();
-            }
-        };
-    }
+pub fn start() -> Res<()> {
+    match MinerConfig::existing_config() {
+        true => {
+            println!("Found existing config.");
+        }
+        false => {
+            MinerConfig::optional_setup();
+        }
+    };
+
+    Ok(())
 }

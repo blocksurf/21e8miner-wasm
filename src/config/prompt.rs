@@ -3,7 +3,7 @@ use std::io;
 use std::io::Write;
 
 use crate::config::MinerConfig;
-pub struct Prompt {}
+pub struct Prompt;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "cli")))]
 impl Prompt {
@@ -22,9 +22,7 @@ impl Prompt {
                 break;
             }
         }
-        input.trim().to_string();
-
-        input
+        input.trim().to_string()
     }
 
     pub fn confirm_prompt(prompt: &str) -> bool {

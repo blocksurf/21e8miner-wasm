@@ -20,19 +20,19 @@ name = "setup"
 path = "src/bin/setup/bin.rs"
 
 [dependencies]
-#wasm-bindgen = "0.2.87"
-rayon = "1.7.0"
 bsv = { git = "https://github.com/blocksurf/bsv-wasm", rev = "5f8f8e9d241a985aa2c7ae15019974e83a22b7e3" }
-#wasm-bindgen-rayon = {version = "1.0.3", features = ["atomics", "bulk-memory"]}
 hex = "0.4.3"
 serde = { version = "*", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
-parking_lot = "0.12.1"
-reqwest = { version = "0.11.18", features = ["blocking", "json"] }
+tokio = { version = "1.34", features = ["full"] }
+reqwest = { version = "0.11.18", features = ["json"] }
 config = "0.13.3"
-directories = "5.0.1"
 toml = "0.8.8"
 inquire = "0.6.2"
+anyhow = "*"
+
+#wasm-bindgen-rayon = {version = "1.0.3", features = ["atomics", "bulk-memory"]}
+#wasm-bindgen = "0.2.87"
 
 [profile.dev]
 opt-level = 0

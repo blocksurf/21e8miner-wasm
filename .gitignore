@@ -10,4 +10,6 @@ wasm-pack.log
 debug/
 target/
 
-config.toml
+Config.toml
+start
+setup
