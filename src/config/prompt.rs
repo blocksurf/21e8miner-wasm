@@ -1,4 +1,5 @@
 use bsv::PrivateKey;
+use std::io;
 use std::io::Write;
 
 use crate::config::MinerConfig;
@@ -7,18 +8,21 @@ pub struct Prompt {}
 #[cfg_attr(docsrs, doc(cfg(feature = "cli")))]
 impl Prompt {
     pub fn read_input() -> String {
-        std::io::stdout().flush().unwrap();
-
         let mut input = String::new();
 
-        std::io::stdin().read_line(&mut input).unwrap();
+        loop {
+            io::stdout().flush().unwrap();
 
-        if input.ends_with('\n') {
-            input.pop();
-            if input.ends_with('\r') {
-                input.pop();
+            input.clear();
+            io::stdin().read_line(&mut input).unwrap();
+
+            if input.trim().contains('\n') || input.trim().contains('\r') {
+                println!("Invalid input. Please do not include newlines or carriage returns.");
+            } else {
+                break;
             }
-        };
+        }
+        input.trim().to_string();
 
         input
     }
@@ -37,7 +41,7 @@ impl Prompt {
 
     pub fn text_prompt(prompt: &str) -> String {
         print!("{}: ", prompt);
-        Prompt::read_input()
+        Self::read_input()
     }
 
     pub fn run_setup() -> MinerConfig {

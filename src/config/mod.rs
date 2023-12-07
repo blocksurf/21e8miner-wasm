@@ -1,5 +1,8 @@
 pub mod prompt;
-use prompt::Prompt;
+pub use prompt::*;
+
+pub mod cli;
+pub use cli::*;
 
 use bsv::PrivateKey;
 use serde::{Deserialize, Serialize};

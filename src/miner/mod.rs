@@ -1,18 +1,17 @@
+use crate::MinerConfig;
+use crate::Prompt;
 use bsv::{
     Hash, MatchToken, OpCodes, P2PKHAddress, PrivateKey, Script, ScriptBit, ScriptTemplate,
-    SigHash, Signature, SigningHash, Transaction, TxIn, TxOut, ECDSA,
+    SigHash, SighashSignature, Transaction, TxIn, TxOut, ECDSA,
 };
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::miner_config::MinerConfig;
-use crate::prompt::Prompt;
-
 pub struct MagicMiner {}
 
-pub struct MinerResult(Signature, PrivateKey);
+pub struct MinerResult(SighashSignature, PrivateKey);
 
 // ANSI escape
 const RED: &str = "\x1b[32m";
@@ -76,25 +75,22 @@ impl MagicMiner {
     pub fn sign(sig_hash_preimage: &[u8], target: &[u8]) -> Option<MinerResult> {
         let ephemeral_key = PrivateKey::from_random();
 
-        let signature = ECDSA::sign_with_deterministic_k(
+        let sig = ECDSA::sign_with_deterministic_k(
             &ephemeral_key,
             sig_hash_preimage,
             bsv::SigningHash::Sha256d,
             false,
-            false,
         )
         .unwrap();
 
-        let sighash_flag: Vec<u8> = vec![65]; // 0x41 SigHash::InputsOutputs
+        let sighash_signature =
+            SighashSignature::new(&sig, SigHash::InputsOutputs, sig_hash_preimage);
 
-        let mut hashbuf = signature.to_der_bytes();
-        hashbuf.extend(&sighash_flag);
-
-        let sig256 = Hash::sha_256(&hashbuf).to_bytes();
+        let sig256 = Hash::sha_256(&sighash_signature.to_bytes().unwrap()).to_bytes();
 
         if sig256.starts_with(target) {
             println!("\n\r{}{}", RED, hex::encode(sig256));
-            Some(MinerResult(signature, ephemeral_key))
+            Some(MinerResult(sighash_signature, ephemeral_key))
         } else {
             print!("\r{}{}", GREEN, hex::encode(sig256));
             None
@@ -147,7 +143,7 @@ impl MagicMiner {
     }
 
     pub fn mine_id(
-        input_tx: Transaction,
+        from: Transaction,
         output_index: usize,
         target: Vec<u8>,
         pay_to_script: Script,
@@ -155,7 +151,7 @@ impl MagicMiner {
     ) {
         let mut tx = Transaction::new(1, 0);
 
-        let target_output = match input_tx.get_output(output_index) {
+        let target_output = match from.get_output(output_index) {
             Some(x) => x,
             None => return,
         };
@@ -168,8 +164,8 @@ impl MagicMiner {
 
         tx_in.set_satoshis(*value);
         tx_in.set_locking_script(&locking_script);
-        tx_in.set_prev_tx_id(&input_tx.get_id_bytes().unwrap());
-        tx_in.set_vout(output_index.try_into().unwrap());
+        tx_in.set_prev_tx_id(&from.get_id_bytes().unwrap());
+        tx_in.set_vout(output_index as u32);
 
         tx.add_input(&tx_in);
 
@@ -186,14 +182,9 @@ impl MagicMiner {
             let miner_priv = PrivateKey::from_wif(&miner_config.miner_id.priv_key).unwrap();
             let miner_pub = miner_priv.to_public_key().unwrap();
 
-            let sig = ECDSA::sign_with_deterministic_k(
-                &miner_priv,
-                &input_tx.to_bytes().unwrap(),
-                SigningHash::Sha256d,
-                true,
-                true,
-            )
-            .unwrap();
+            let sig =
+                ECDSA::sign_digest_with_deterministic_k(&miner_priv, &from.get_id_bytes().unwrap())
+                    .unwrap();
 
             let schema = json!({
                 "id": miner_pub.to_hex().unwrap(),
@@ -232,7 +223,6 @@ impl MagicMiner {
             .sighash_preimage(SigHash::InputsOutputs, 0, &locking_script, sats)
             .unwrap();
 
-        let sighash: Vec<u8> = vec![65];
         let mut pow_result: Option<MinerResult> = None;
 
         while pow_result.is_none() {
@@ -246,25 +236,14 @@ impl MagicMiner {
         let sig = unwrapped.0;
         let ephemeral_key = unwrapped.1;
 
-        let mut asm = "".to_owned();
-
-        let mut der = sig.to_der_bytes();
-        der.append(&mut sighash.clone());
-
-        let formatted_length = Script::get_pushdata_bytes(der.len()).unwrap();
-        asm.push_str(&format!("{:x}", formatted_length[0]));
-
-        asm.push_str(&sig.to_der_hex());
-        asm.push_str(&hex::encode(&sighash));
-
         let public_key = &ephemeral_key.to_public_key().unwrap();
 
-        asm.push_str(&format!("{:x}", public_key.to_bytes().unwrap().len()));
-        asm.push_str(&public_key.to_hex().unwrap());
+        let mut unlocking_script = Script::default();
+
+        unlocking_script.push(ScriptBit::Push(sig.to_bytes().unwrap()));
+        unlocking_script.push(ScriptBit::Push(public_key.to_bytes().unwrap()));
 
         let prev_txid = &input.get_prev_tx_id(None);
-
-        let unlocking_script = Script::from_hex(&asm).unwrap();
 
         let tx_in_final = TxIn::new(
             prev_txid,
